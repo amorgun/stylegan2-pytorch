@@ -280,10 +280,10 @@ class NoiseInjection(nn.Module):
 
 
 class ConstantInput(nn.Module):
-    def __init__(self, channel, size=4):
+    def __init__(self, channel, size_h=4, size_w=4):
         super().__init__()
 
-        self.input = nn.Parameter(torch.randn(1, channel, size, size))
+        self.input = nn.Parameter(torch.randn(1, channel, size_h, size_w))
 
     def forward(self, input):
         batch = input.shape[0]
@@ -354,7 +354,9 @@ class ToRGB(nn.Module):
 class Generator(nn.Module):
     def __init__(
         self,
-        size,
+        size_h,
+        size_w,
+        log_size,
         style_dim,
         n_mlp,
         channel_multiplier=2,
@@ -363,7 +365,14 @@ class Generator(nn.Module):
     ):
         super().__init__()
 
-        self.size = size
+        assert size_w % 2**log_size == 0, f'Width {size_w} is not divisible by {2**log_size}'
+        assert size_h % 2**log_size == 0, f'Height {size_h} is not divisible by {2**log_size}'
+        self.size_h = size_h
+        self.size_w = size_w
+        self.log_size = log_size
+        
+        self.init_h = self.size_h // 2**self.log_size
+        self.init_w = self.size_w // 2**self.log_size
 
         self.style_dim = style_dim
 
@@ -390,14 +399,13 @@ class Generator(nn.Module):
             1024: 16 * channel_multiplier,
         }
 
-        self.input = ConstantInput(self.channels[4])
+        self.input = ConstantInput(self.channels[4], size_h=self.init_h, size_w=self.init_w)
         self.conv1 = StyledConv(
             self.channels[4], self.channels[4], 3, style_dim, blur_kernel=blur_kernel
         )
         self.to_rgb1 = ToRGB(self.channels[4], style_dim, upsample=False)
 
-        self.log_size = int(math.log(size, 2))
-        self.num_layers = (self.log_size - 2) * 2 + 1
+        self.num_layers = self.log_size * 2 + 1
 
         self.convs = nn.ModuleList()
         self.upsamples = nn.ModuleList()
@@ -407,11 +415,11 @@ class Generator(nn.Module):
         in_channel = self.channels[4]
 
         for layer_idx in range(self.num_layers):
-            res = (layer_idx + 5) // 2
-            shape = [1, 1, 2 ** res, 2 ** res]
+            res = (layer_idx + 1) // 2
+            shape = [1, 1, self.init_h * 2 ** res, self.init_w * 2 ** res]
             self.noises.register_buffer(f"noise_{layer_idx}", torch.randn(*shape))
 
-        for i in range(3, self.log_size + 1):
+        for i in range(3, self.log_size + 3):
             out_channel = self.channels[2 ** i]
 
             self.convs.append(
@@ -435,16 +443,16 @@ class Generator(nn.Module):
 
             in_channel = out_channel
 
-        self.n_latent = self.log_size * 2 - 2
+        self.n_latent = self.log_size * 2 + 2
 
     def make_noise(self):
         device = self.input.input.device
 
-        noises = [torch.randn(1, 1, 2 ** 2, 2 ** 2, device=device)]
+        noises = [torch.randn(1, 1, self.init_h, self.init_w, device=device)]
 
-        for i in range(3, self.log_size + 1):
+        for i in range(1, self.log_size + 1):
             for _ in range(2):
-                noises.append(torch.randn(1, 1, 2 ** i, 2 ** i, device=device))
+                noises.append(torch.randn(1, 1, self.init_h * 2 ** i, self.init_w * 2 ** i, device=device))
 
         return noises
 
@@ -510,6 +518,7 @@ class Generator(nn.Module):
             latent = torch.cat([latent, latent2], 1)
 
         out = self.input(latent)
+        
         out = self.conv1(out, latent[:, 0], noise=noise[0])
 
         skip = self.to_rgb1(out, latent[:, 1])
@@ -600,9 +609,26 @@ class ResBlock(nn.Module):
 
 
 class Discriminator(nn.Module):
-    def __init__(self, size, channel_multiplier=2, blur_kernel=[1, 3, 3, 1]):
+    def __init__(
+        self,
+        size_h,
+        size_w,
+        log_size,
+        channel_multiplier=2,
+        blur_kernel=[1, 3, 3, 1],
+    ):
         super().__init__()
+        
 
+        assert size_w % 2**log_size == 0, f'Width {size_w} is not divisible by {2**log_size}'
+        assert size_h % 2**log_size == 0, f'Height {size_h} is not divisible by {2**log_size}'
+        self.size_h = size_h
+        self.size_w = size_w
+        self.log_size = log_size
+        
+        self.init_h = self.size_h // 2**self.log_size
+        self.init_w = self.size_w // 2**self.log_size
+        
         channels = {
             4: 512,
             8: 512,
@@ -615,13 +641,11 @@ class Discriminator(nn.Module):
             1024: 16 * channel_multiplier,
         }
 
-        convs = [ConvLayer(3, channels[size], 1)]
+        convs = [ConvLayer(3, channels[2 ** (log_size + 2)], 1)]
 
-        log_size = int(math.log(size, 2))
+        in_channel = channels[2 ** (log_size + 2)]
 
-        in_channel = channels[size]
-
-        for i in range(log_size, 2, -1):
+        for i in range(log_size + 2, 2, -1):
             out_channel = channels[2 ** (i - 1)]
 
             convs.append(ResBlock(in_channel, out_channel, blur_kernel))
@@ -635,7 +659,7 @@ class Discriminator(nn.Module):
 
         self.final_conv = ConvLayer(in_channel + 1, channels[4], 3)
         self.final_linear = nn.Sequential(
-            EqualLinear(channels[4] * 4 * 4, channels[4], activation="fused_lrelu"),
+            EqualLinear(channels[4] * self.init_h * self.init_w, channels[4], activation="fused_lrelu"),
             EqualLinear(channels[4], 1),
         )
 
@@ -658,4 +682,3 @@ class Discriminator(nn.Module):
         out = self.final_linear(out)
 
         return out
-

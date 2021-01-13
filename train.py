@@ -19,7 +19,7 @@ except ImportError:
     wandb = None
 
 from model import Generator, Discriminator
-from dataset import MultiResolutionDataset
+from dataset import MultiResolutionDataset, FolderDataset
 from distributed import (
     get_rank,
     synchronize,
@@ -339,7 +339,13 @@ if __name__ == "__main__":
         help="number of the samples generated during training",
     )
     parser.add_argument(
-        "--size", type=int, default=256, help="image sizes for the model"
+        "--size-h", type=int, default=256, help="image height for the model"
+    )
+    parser.add_argument(
+        "--size-w", type=int, default=256, help="image width for the model"
+    )
+    parser.add_argument(
+        "--log-size", type=int, default=7, help="depth of the model"
     )
     parser.add_argument(
         "--r1", type=float, default=10, help="weight of the r1 regularization"
@@ -373,6 +379,12 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--ckpt",
+        type=str,
+        default=None,
+        help="path to the checkpoints to resume training",
+    )
+    parser.add_argument(
+        "--warm-start",
         type=str,
         default=None,
         help="path to the checkpoints to resume training",
@@ -434,13 +446,16 @@ if __name__ == "__main__":
     args.start_iter = 0
 
     generator = Generator(
-        args.size, args.latent, args.n_mlp, channel_multiplier=args.channel_multiplier
+        args.size_h, args.size_w, args.log_size,
+        args.latent, args.n_mlp, channel_multiplier=args.channel_multiplier
     ).to(device)
     discriminator = Discriminator(
-        args.size, channel_multiplier=args.channel_multiplier
+        args.size_h, args.size_w, args.log_size,
+        channel_multiplier=args.channel_multiplier
     ).to(device)
     g_ema = Generator(
-        args.size, args.latent, args.n_mlp, channel_multiplier=args.channel_multiplier
+        args.size_h, args.size_w, args.log_size,
+        args.latent, args.n_mlp, channel_multiplier=args.channel_multiplier
     ).to(device)
     g_ema.eval()
     accumulate(g_ema, generator, 0)
@@ -458,7 +473,16 @@ if __name__ == "__main__":
         lr=args.lr * d_reg_ratio,
         betas=(0 ** d_reg_ratio, 0.99 ** d_reg_ratio),
     )
+    if args.warm_start is not None:
+        print("load initial model:", args.warm_start)
 
+        ckpt = torch.load(args.warm_start)
+        if 'g' in ckpt:
+            generator.load_state_dict(ckpt["g"])
+        if 'd' in ckpt:
+            discriminator.load_state_dict(ckpt["d"])
+        if 'g_ema' in ckpt:
+            g_ema.load_state_dict(ckpt["g_ema"])
     if args.ckpt is not None:
         print("load model:", args.ckpt)
 
@@ -500,8 +524,8 @@ if __name__ == "__main__":
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5), inplace=True),
         ]
     )
-
-    dataset = MultiResolutionDataset(args.path, transform, args.size)
+    dataset = FolderDataset(args.path, transform)
+#     dataset = MultiResolutionDataset(args.path, transform, args.size)
     loader = data.DataLoader(
         dataset,
         batch_size=args.batch,

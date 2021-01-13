@@ -1,12 +1,13 @@
 from io import BytesIO
 
-import lmdb
 from PIL import Image
 from torch.utils.data import Dataset
 
 
 class MultiResolutionDataset(Dataset):
     def __init__(self, path, transform, resolution=256):
+        import lmdb
+        
         self.env = lmdb.open(
             path,
             max_readers=32,
@@ -35,6 +36,24 @@ class MultiResolutionDataset(Dataset):
 
         buffer = BytesIO(img_bytes)
         img = Image.open(buffer)
+        img = self.transform(img)
+
+        return img
+
+    
+class FolderDataset(Dataset):
+    def __init__(self, path, transform):
+        import pathlib
+        self.path = pathlib.Path(path)
+        self.files = list(self.path.iterdir())
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.files)
+
+    def __getitem__(self, index):
+        filename = self.files[index]
+        img = Image.open(self.path / filename)
         img = self.transform(img)
 
         return img
