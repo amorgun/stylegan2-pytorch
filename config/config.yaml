@@ -23,7 +23,7 @@ model:
     augment_p: 0.2  # probability of applying augmentation. 0 = use adaptive augmentation
     ada_target: 0.6  # target augmentation probability for adaptive augmentation
     ada_length: 5000  # target duraing to reach augmentation probability for adaptive augmentation
-    ada_every: 256  # probability update interval of the adaptive augmentation
+    ada_every: 8  # probability update interval of the adaptive augmentation
     mixing: 0.9  # probability of latent code mixing
     top_k_batches: 0
     top_k_batch_size: 8

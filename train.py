@@ -235,7 +235,11 @@ class StyleGAN2(pl.LightningModule):
             requires_grad(self.generator, False)
             requires_grad(self.discriminator, True)
             real_img.requires_grad = True
-            real_pred = self.discriminator(real_img)
+            if args.augment:
+                real_img_aug, _ = augment(real_img, self.ada_aug_p)
+            else:
+                real_img_aug = real_img
+            real_pred = self.discriminator(real_img_aug)
             r1_loss = d_r1_loss(real_pred, real_img)
             
             self.log('r1', r1_loss, prog_bar=True)
