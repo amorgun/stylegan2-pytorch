@@ -1,5 +1,6 @@
 import argparse
 
+import pathlib
 import torch
 from torchvision import utils
 from model import Generator
@@ -10,6 +11,8 @@ def generate(args, g_ema, device, mean_latent):
 
     with torch.no_grad():
         g_ema.eval()
+        root = pathlib.Path(args.folder)
+        root.mkdir(parents=True, exist_ok=True)
         for i in tqdm(range(args.pics)):
             sample_z = torch.randn(args.sample, args.latent, device=device)
 
@@ -19,7 +22,7 @@ def generate(args, g_ema, device, mean_latent):
 
             utils.save_image(
                 sample,
-                f"sample/{str(i).zfill(6)}.png",
+                root/f"{str(i).zfill(6)}.png",
                 nrow=1,
                 normalize=True,
                 range=(-1, 1),
@@ -32,7 +35,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate samples from the generator")
 
     parser.add_argument(
-        "--size", type=int, default=1024, help="output image size of the generator"
+        "--size-h", type=int, default=1024, help="image height for the model"
+    )
+    parser.add_argument(
+        "--size-w", type=int, default=1024, help="image width for the model"
+    )
+    parser.add_argument(
+        "--log-size", type=int, default=7, help="depth of the model"
     )
     parser.add_argument(
         "--sample",
@@ -62,6 +71,11 @@ if __name__ == "__main__":
         default=2,
         help="channel multiplier of the generator. config-f = 2, else = 1",
     )
+    parser.add_argument(
+        "--folder",
+        type=str,
+        default='sample',
+    )
 
     args = parser.parse_args()
 
@@ -69,7 +83,8 @@ if __name__ == "__main__":
     args.n_mlp = 8
 
     g_ema = Generator(
-        args.size, args.latent, args.n_mlp, channel_multiplier=args.channel_multiplier
+        args.size_h, args.size_w, args.log_size,
+        args.latent, args.n_mlp, channel_multiplier=args.channel_multiplier
     ).to(device)
     checkpoint = torch.load(args.ckpt)
 

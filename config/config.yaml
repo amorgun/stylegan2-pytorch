@@ -1,0 +1,53 @@
+trainer:
+    gpus: 1
+    max_epochs: 1000
+    val_check_interval: 30
+    gradient_clip_val: 10
+    log_gpu_memory: True
+    log_every_n_steps: 5
+model:
+    lr: 0.002
+    d_reg_every: 16
+    g_reg_every: 4
+    hist_log_freq: 15
+    size_h: 768
+    size_w: 512
+    log_size: 7
+    latent: 512
+    n_mlp: 8
+    channel_multiplier: 2
+    r1: 10  # weight of the r1 regularization
+    path_batch_shrink: 2  # batch size reducing factor for the path length regularization (reduce memory consumption)
+    path_regularize: 2  # weight of the path length regularization
+    augment: True  # apply non leaking augmentation
+    augment_p: 0.2  # probability of applying augmentation. 0 = use adaptive augmentation
+    ada_target: 0.6  # target augmentation probability for adaptive augmentation
+    ada_length: 5000  # target duraing to reach augmentation probability for adaptive augmentation
+    ada_every: 256  # probability update interval of the adaptive augmentation
+    mixing: 0.9  # probability of latent code mixing
+    top_k_batches: 0
+    top_k_batch_size: 8
+image_sample:
+    num_samples: 8
+    nrow: 4
+    normalize: True
+    norm_range: [-1, 1]
+    frequency: 100
+checkpoint:
+    frequency: 10000
+    folder: checkpoints
+dataset:
+    _target_: torchvision.datasets.ImageFolder
+    root: images
+transforms:
+    - _target_: torchvision.transforms.RandomHorizontalFlip
+    - _target_: torchvision.transforms.ToTensor
+    - _target_: torchvision.transforms.Normalize
+      mean: [0.5, 0.5, 0.5]
+      std: [0.5, 0.5, 0.5]
+      inplace: True
+dataloader:
+    _target_: torch.utils.data.DataLoader
+    batch_size: 4
+    num_workers: 8
+    shuffle: True

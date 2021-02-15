@@ -3,17 +3,17 @@ import math
 import torch
 from torch.nn import functional as F
 
-from distributed import reduce_sum
+# from distributed import reduce_sum
 from op import upfirdn2d
 
 
-class AdaptiveAugment:
-    def __init__(self, ada_aug_target, ada_aug_len, update_every, device):
+class AdaptiveAugment(torch.nn.Module):
+    def __init__(self, ada_aug_target, ada_aug_len, update_every):
+        super().__init__()
         self.ada_aug_target = ada_aug_target
         self.ada_aug_len = ada_aug_len
         self.update_every = update_every
-
-        self.ada_aug_buf = torch.tensor([0.0, 0.0], device=device)
+        self.register_buffer('ada_aug_buf', torch.tensor([0.0, 0.0]))
         self.r_t_stat = 0
         self.ada_aug_p = 0
 
@@ -23,7 +23,8 @@ class AdaptiveAugment:
             (torch.sign(real_pred).sum().item(), real_pred.shape[0]),
             device=real_pred.device,
         )
-        self.ada_aug_buf += reduce_sum(ada_aug_data)
+#         self.ada_aug_buf += reduce_sum(ada_aug_data)
+        self.ada_aug_buf += ada_aug_data
 
         if self.ada_aug_buf[1] > self.update_every - 1:
             pred_signs, n_pred = self.ada_aug_buf.tolist()
