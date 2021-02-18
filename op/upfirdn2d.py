@@ -143,14 +143,18 @@ class UpFirDn2d(Function):
 
 
 def upfirdn2d(input, kernel, up=1, down=1, pad=(0, 0)):
+    if not isinstance(up, (list, tuple)):
+        up = (up, up)
+    if not isinstance(down, (list, tuple)):
+        down = (down, down)
     if input.device.type != "cuda":
         out = upfirdn2d_native(
-            input, kernel, up, up, down, down, pad[0], pad[1], pad[0], pad[1]
+            input, kernel, up[0], up[1], down[0], down[1], pad[0], pad[1], pad[0], pad[1]
         )
 
     else:
         out = UpFirDn2d.apply(
-            input, kernel, (up, up), (down, down), (pad[0], pad[1], pad[0], pad[1])
+            input, kernel, up, down, (pad[0], pad[1], pad[0], pad[1])
         )
 
     return out

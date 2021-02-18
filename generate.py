@@ -3,7 +3,7 @@ import argparse
 import pathlib
 import torch
 from torchvision import utils
-from model import Generator
+from lightning import StyleGAN2
 from tqdm import tqdm
 
 
@@ -30,8 +30,6 @@ def generate(args, g_ema, device, mean_latent):
 
 
 if __name__ == "__main__":
-    device = "cuda"
-
     parser = argparse.ArgumentParser(description="Generate samples from the generator")
 
     parser.add_argument(
@@ -62,8 +60,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--ckpt",
         type=str,
-        default="stylegan2-ffhq-config-f.pt",
+#         default="stylegan2-ffhq-config-f.pt",
         help="path to the model checkpoint",
+        required=True,
     )
     parser.add_argument(
         "--channel_multiplier",
@@ -76,19 +75,20 @@ if __name__ == "__main__":
         type=str,
         default='sample',
     )
+    parser.add_argument(
+        "--device",
+        type=str,
+        default='cuda',
+    )
 
     args = parser.parse_args()
 
     args.latent = 512
     args.n_mlp = 8
 
-    g_ema = Generator(
-        args.size_h, args.size_w, args.log_size,
-        args.latent, args.n_mlp, channel_multiplier=args.channel_multiplier
-    ).to(device)
-    checkpoint = torch.load(args.ckpt)
-
-    g_ema.load_state_dict(checkpoint["g_ema"])
+    g_ema = StyleGAN2.load_from_checkpoint(checkpoint_path=args.ckpt).g_ema.to(args.device)
+#     checkpoint = torch.load(args.ckpt)
+#     g_ema.load_state_dict(checkpoint["g_ema"])
 
     if args.truncation < 1:
         with torch.no_grad():
@@ -96,4 +96,4 @@ if __name__ == "__main__":
     else:
         mean_latent = None
 
-    generate(args, g_ema, device, mean_latent)
+    generate(args, g_ema, args.device, mean_latent)

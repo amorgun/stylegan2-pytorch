@@ -311,8 +311,8 @@ def get_padding(G, height, width, kernel_size):
     pad = cp[:, :2, :].permute(1, 0, 2).flatten(1)
     pad = torch.cat((-pad, pad)).max(1).values
     pad = pad + torch.tensor([pad_k * 2 - cx, pad_k * 2 - cy] * 2, device=device)
-    pad = pad.max(torch.tensor([0, 0] * 2, device=device))
-    pad = pad.min(torch.tensor([width - 1, height - 1] * 2, device=device))
+    pad = pad.max(torch.tensor([0, 0] * 2, device=device).type_as(pad))
+    pad = pad.min(torch.tensor([width - 1, height - 1] * 2, device=device).type_as(pad))
 
     pad_x1, pad_y1, pad_x2, pad_y2 = pad.ceil().to(torch.int32)
 
